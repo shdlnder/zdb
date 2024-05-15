@@ -54,6 +54,11 @@ pub fn main() !void {
             repl.COMMAND_RESULT.GET => {
                 const prepared: commands.PreparedGetCommand = prepareGet.prepareGet(command);
 
+                if (prepared.result != commands.PREP_RESULT.SUCCESS) {
+                    try stdout.print("Prepare Command Failed\n", .{});
+                    continue;
+                }
+
                 const executed = dataHash.get(prepared.op.key) orelse "";
 
                 try stdout.print("Execute Command Success\n", .{});
@@ -62,6 +67,11 @@ pub fn main() !void {
             },
             repl.COMMAND_RESULT.PUT => {
                 const prepared: commands.PreparedPutCommand = preparePut.preparePut(command);
+
+                if (prepared.result != commands.PREP_RESULT.SUCCESS) {
+                    try stdout.print("Prepare Command Failed\n", .{});
+                    continue;
+                }
 
                 dataHash.put(prepared.op.key, prepared.op.value) catch {
                     try stdout.print("Execute Command Failed\n", .{});
