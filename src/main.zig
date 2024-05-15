@@ -11,25 +11,6 @@ const preparePut = @import("./commands/prepare/put.zig");
 const executeGet = @import("./commands/execute/get.zig");
 const executePut = @import("./commands/execute/put.zig");
 
-const StatementType = enum {
-    STATEMENT_INSERT,
-    STATEMENT_SELECT,
-    STATEMENT_UNKNOWN,
-};
-
-const PREPARE_STATEMENT_RESULT = enum {
-    SUCCESS,
-    SYNTAX_ERROR,
-    UNRECOGNIZED_STATEMENT,
-    FAIL,
-};
-
-const EXECUTE_STATEMENT_RESULT = enum {
-    SUCCESS,
-    TABLE_FULL,
-    FAIL,
-};
-
 pub fn printPrompt(stdout: anytype) !void {
     try stdout.print("db > ", .{});
 }
@@ -103,51 +84,6 @@ pub fn main() !void {
                 continue;
             },
         }
-
-        // enum guarantees all options are accounted for
-        // var statement = Statement {
-        //     .type = StatementType.STATEMENT_UNKNOWN,
-        //     .row_to_insert = Row {
-        //         .id = 0,
-        //         .str1 = "",
-        //         .str2 = "",
-        //     },
-        // };
-        // const result = prepareStatement(command, &statement, stdout) catch PREPARE_STATEMENT_RESULT.FAIL;
-        //
-        // switch (result) {
-        //     PREPARE_STATEMENT_RESULT.SUCCESS => {
-        //         try stdout.print("Prepare statement success!\n", .{});
-        //     },
-        //     PREPARE_STATEMENT_RESULT.SYNTAX_ERROR => {
-        //         try stdout.print("Syntax Error: {s}\n", .{command});
-        //     },
-        //     PREPARE_STATEMENT_RESULT.UNRECOGNIZED_STATEMENT => {
-        //         try stdout.print("Unrecognized Statement\n", .{});
-        //         continue;
-        //     },
-        //     PREPARE_STATEMENT_RESULT.FAIL => {
-        //         try stdout.print("Failed to prepare statement: {s}\n", .{command});
-        //         continue;
-        //     },
-        // }
-        // try stdout.print("here?\n", .{});
-        //
-        // const execResult = executeStatement(&statement, table, allocator, stdout) catch EXECUTE_STATEMENT_RESULT.FAIL;
-        // switch (execResult) {
-        //     EXECUTE_STATEMENT_RESULT.SUCCESS => {
-        //         try stdout.print("Executed statement: {s}\n", .{command});
-        //         break;
-        //     },
-        //     EXECUTE_STATEMENT_RESULT.FAIL => {
-        //         try stdout.print("Failed to execute statement: {s}\n", .{command});
-        //         continue;
-        //     },
-        //     EXECUTE_STATEMENT_RESULT.TABLE_FULL => {
-        //         try stdout.print("Failed to execute statement, table is full: {s}\n", .{command});
-        //         continue;
-        //     },
-        // }
     }
 }
 
