@@ -1,5 +1,5 @@
 const std = @import("std");
-const commands = @import("../commands.zig");
+const commands = @import("./commands.zig");
 
 pub fn preparePut(command: []u8) commands.PreparedPutCommand {
     var iter = std.mem.tokenizeAny(u8, command, " \r\n");
