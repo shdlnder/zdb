@@ -47,7 +47,7 @@ pub fn preparePutKV(key: []const u8, value: []const u8) commands.PreparedPutComm
 
     const minSize = @min(value.len, 5);
     const mutableSlice: []u8 = saveValue[0..minSize];
-    @memcpy(mutableSlice, value);
+    @memcpy(mutableSlice, value[0..minSize]);
 
     if (key.len < 1) {
         return commands.PreparedPutCommand{

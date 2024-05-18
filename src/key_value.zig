@@ -145,3 +145,20 @@ test "Test NaiveKeyValue" {
     const res = kv.get("test0");
     try std.testing.expectEqual(res.?.len, 5);
 }
+
+test "Test NaiveKeyValue truncates large value" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
+    var kv = NaiveKeyValue([5]u8).init(allocator);
+
+    const res1 = kv.put("test0", "0123456789") catch {
+        return;
+    };
+    try std.testing.expectEqual(res1, 0);
+
+    const res = kv.get("test0");
+    try std.testing.expectEqual(res.?.len, 5);
+}
