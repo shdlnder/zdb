@@ -26,7 +26,7 @@ pub fn main() !void {
 
     const allocator = arena.allocator();
 
-    var dataHash = std.StringHashMap([]const u8).init(allocator);
+    var dataHash = std.StringHashMap([5]u8).init(allocator);
 
     var input: [500]u8 = undefined;
     const stdin = std.io.getStdIn().reader();
@@ -59,7 +59,7 @@ pub fn main() !void {
                     continue;
                 }
 
-                const executed = dataHash.get(prepared.op.key) orelse "";
+                const executed = dataHash.get(prepared.op.key) orelse [5]u8{' ', ' ', ' ', ' ', ' '};
 
                 try stdout.print("Execute Command Success\n", .{});
                 try stdout.print("Key: <{s}> Value: <{s}>\n", .{prepared.op.key, executed});

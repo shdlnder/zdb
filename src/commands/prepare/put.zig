@@ -7,13 +7,18 @@ pub fn preparePut(command: []u8) commands.PreparedPutCommand {
     const op = iter.next() orelse "";
     const key = iter.next() orelse "";
     const value = iter.next() orelse "";
+    var saveValue: [5]u8 = undefined;
+
+    const minSize = @min(value.len, 5);
+    const mutableSlice: []u8 = saveValue[0..minSize];
+    @memcpy(mutableSlice, value);
 
     if (!std.mem.eql(u8, op, commands.CMD_PUT)) {
         return commands.PreparedPutCommand{
             .result = commands.PREP_RESULT.INVALID_COMMAND,
             .op = commands.OpPut{
                 .key = key,
-                .value = value,
+                .value = saveValue,
             },
         };
     }
@@ -23,7 +28,7 @@ pub fn preparePut(command: []u8) commands.PreparedPutCommand {
             .result = commands.PREP_RESULT.INVALID_KEY,
             .op = commands.OpPut{
                 .key = key,
-                .value = value,
+                .value = saveValue,
             },
         };
     }
@@ -32,7 +37,7 @@ pub fn preparePut(command: []u8) commands.PreparedPutCommand {
         .result = commands.PREP_RESULT.SUCCESS,
         .op = commands.OpPut{
             .key = key,
-            .value = value,
+            .value = saveValue,
         },
     };
 }
