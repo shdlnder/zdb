@@ -32,3 +32,21 @@ pub fn prepareGet(command: []u8) commands.PreparedGetCommand {
         },
     };
 }
+
+pub fn prepareGetKV(key: []const u8) commands.PreparedGetCommand {
+    if (key.len < 1) {
+        return commands.PreparedGetCommand{
+            .result = commands.PREP_RESULT.INVALID_KEY,
+            .op = commands.OpGet{
+                .key = key,
+            },
+        };
+    }
+
+    return commands.PreparedGetCommand{
+        .result = commands.PREP_RESULT.SUCCESS,
+        .op = commands.OpGet{
+            .key = key,
+        },
+    };
+}

@@ -82,3 +82,66 @@ pub fn runRepl(allocator: std.mem.Allocator, stdin: anytype, stdout: anytype) an
     }
 
 }
+
+pub fn NaiveKeyValue(
+    comptime V: type,
+) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        backingMap: std.StringHashMap(V),
+        const Self = @This();
+
+        pub fn init(allocator: std.mem.Allocator) Self {
+            return .{
+                .allocator = allocator,
+                .backingMap = std.StringHashMap(V).init(allocator),
+            };
+        }
+
+        pub fn put(self: *Self, key: []const u8, value: []const u8) std.mem.Allocator.Error!u2 {
+            const prepared: commands.PreparedPutCommand = preparePut.preparePutKV(key, value);
+
+            if (prepared.result != commands.PREP_RESULT.SUCCESS) {
+                return 1;
+            }
+
+            self.backingMap.put(prepared.op.key, prepared.op.value) catch {
+                return 1;
+            };
+
+            return 0;
+        }
+
+        pub fn get(self: Self, key: []const u8) ?V {
+            const prepared: commands.PreparedGetCommand = prepareGet.prepareGetKV(key);
+
+            if (prepared.result != commands.PREP_RESULT.SUCCESS) {
+                return null;
+            }
+
+            return self.backingMap.get(prepared.op.key) orelse [5]u8{' ', ' ', ' ', ' ', ' '};
+        }
+    };
+}
+
+test "Test NaiveKeyValue" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
+    var kv = NaiveKeyValue([5]u8).init(allocator);
+
+    const res1 = kv.put("test0", "moo") catch {
+        return;
+    };
+    try std.testing.expectEqual(res1, 0);
+
+    const res2 = kv.put("test1", "moo2") catch {
+        return;
+    };
+    try std.testing.expectEqual(res2, 0);
+
+    const res = kv.get("test0");
+    try std.testing.expectEqual(res.?.len, 5);
+}

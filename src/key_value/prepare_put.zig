@@ -41,3 +41,29 @@ pub fn preparePut(command: []u8) commands.PreparedPutCommand {
         },
     };
 }
+
+pub fn preparePutKV(key: []const u8, value: []const u8) commands.PreparedPutCommand {
+    var saveValue: [5]u8 = undefined;
+
+    const minSize = @min(value.len, 5);
+    const mutableSlice: []u8 = saveValue[0..minSize];
+    @memcpy(mutableSlice, value);
+
+    if (key.len < 1) {
+        return commands.PreparedPutCommand{
+            .result = commands.PREP_RESULT.INVALID_KEY,
+            .op = commands.OpPut{
+                .key = key,
+                .value = saveValue,
+            },
+        };
+    }
+
+    return commands.PreparedPutCommand{
+        .result = commands.PREP_RESULT.SUCCESS,
+        .op = commands.OpPut{
+            .key = key,
+            .value = saveValue,
+        },
+    };
+}
