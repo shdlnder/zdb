@@ -172,6 +172,37 @@ pub fn NaiveKeyValue(
 
             return 0;
         }
+
+        // Currently the keys are 10 and values are 5
+        // reset size later
+        pub fn fileDump(self: *Self, fileName: []const u8) anyerror!u2 {
+
+            const stdout = std.io.getStdOut().writer();
+            try stdout.print("Starting write\n", .{});
+
+            const file = try std.fs.cwd().createFile(fileName, .{  });
+            defer file.close();
+
+            var it = self.backingMap.iterator();
+            while (it.next()) |entry| {
+                try stdout.print("Next!\n", .{});
+                // I don't like saving like this
+                var writeMe: [16]u8 = undefined;
+
+                var mutableEndSlice: []u8 = writeMe[15..16];
+                mutableEndSlice[0] = '\n';
+                var mutableKeySlice: []u8 = writeMe[0..10];
+                @memcpy(std.mem.asBytes(&mutableKeySlice)[0..10], std.mem.asBytes(&entry.key_ptr.*)[0..10]);
+                var mutableValSlice: []u8 = writeMe[10..15];
+                @memcpy(std.mem.asBytes(&mutableValSlice)[0..5], std.mem.asBytes(&entry.value_ptr.*)[0..5]);
+
+                try stdout.print("Write this {s}\n", .{writeMe});
+
+                try file.writeAll(&writeMe);
+            }
+
+            return 0;
+        }
     };
 }
 
@@ -254,4 +285,36 @@ test "Test load file" {
     try std.testing.expectEqual(res.?.len, 5);
     try stdout.print("Value {s}\n", .{res.?});
     try std.testing.expectEqual(res, [5]u8{'t','e','s','t','1'});
+}
+
+test "Test NaiveKeyValue Write File" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
+    var kv = NaiveKeyValue([5]u8).init(allocator);
+
+    const res1 = kv.put("test0", "moo") catch {
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+    try std.testing.expectEqual(res1, 0);
+
+    const res2 = kv.put("test1", "moo2") catch {
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+    try std.testing.expectEqual(res2, 0);
+
+    const res = kv.get("test0");
+
+    try std.testing.expectEqual(res.?.len, 5);
+    try std.testing.expectEqual(res, [5]u8{'m','o','o',170,170});
+
+    const resf = kv.fileDump("./src/out-data/kv-dump.dat") catch {
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+    try std.testing.expectEqual(resf, 0);
 }
