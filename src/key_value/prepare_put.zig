@@ -9,6 +9,16 @@ pub fn preparePut(command: []u8) commands.PreparedPutCommand {
     const value = iter.next() orelse "";
     var saveValue: [5]u8 = undefined;
 
+    if (value.len > 5) {
+        return commands.PreparedPutCommand{
+            .result = commands.PREP_RESULT.VALUE_TOO_LARGE,
+            .op = commands.OpPut{
+                .key = key,
+                .value = saveValue,
+            },
+        };
+    }
+
     const minSize = @min(value.len, 5);
     const mutableSlice: []u8 = saveValue[0..minSize];
     @memcpy(mutableSlice, value);
@@ -45,11 +55,17 @@ pub fn preparePut(command: []u8) commands.PreparedPutCommand {
 pub fn preparePutKV(key: []const u8, value: []const u8) commands.PreparedPutCommand {
     var saveValue: [5]u8 = undefined;
 
-    const minSize = @min(value.len, 5);
-    const mutableSlice: []u8 = saveValue[0..minSize];
-    @memcpy(mutableSlice, value[0..minSize]);
+    if (value.len > 5) {
+        return commands.PreparedPutCommand{
+            .result = commands.PREP_RESULT.VALUE_TOO_LARGE,
+            .op = commands.OpPut{
+                .key = key,
+                .value = saveValue,
+            },
+        };
+    }
 
-    if (key.len < 1) {
+    if (key.len < 1 or key.len > 10) {
         return commands.PreparedPutCommand{
             .result = commands.PREP_RESULT.INVALID_KEY,
             .op = commands.OpPut{
@@ -58,6 +74,10 @@ pub fn preparePutKV(key: []const u8, value: []const u8) commands.PreparedPutComm
             },
         };
     }
+
+    const minSize = @min(value.len, 5);
+    const mutableSlice: []u8 = saveValue[0..minSize];
+    @memcpy(mutableSlice, value[0..minSize]);
 
     return commands.PreparedPutCommand{
         .result = commands.PREP_RESULT.SUCCESS,

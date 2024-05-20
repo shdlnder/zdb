@@ -3,6 +3,7 @@ pub const PREP_RESULT = enum {
     FAIL,
     INVALID_COMMAND,
     INVALID_KEY,
+    VALUE_TOO_LARGE,
 };
 
 pub const CMD_GET = "GET";
