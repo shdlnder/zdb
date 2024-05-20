@@ -112,7 +112,7 @@ pub fn NaiveKeyValue(
             return 0;
         }
 
-        pub fn get(self: Self, key: []const u8) ?V {
+        pub fn get(self: *Self, key: []const u8) ?V {
             const prepared: commands.PreparedGetCommand = prepareGet.prepareGetKV(key);
 
             if (prepared.result != commands.PREP_RESULT.SUCCESS) {
@@ -120,6 +120,57 @@ pub fn NaiveKeyValue(
             }
 
             return self.backingMap.get(prepared.op.key) orelse [5]u8{' ', ' ', ' ', ' ', ' '};
+        }
+
+        // Currently the keys are 10 and values are 5
+        // reset size later
+        pub fn load(self: *Self, fileName: []const u8) anyerror!u2 {
+            const stdout = std.io.getStdOut().writer();
+            var file = try std.fs.cwd().openFile(fileName, .{});
+            defer file.close();
+
+            var buf_reader = std.io.bufferedReader(file.reader());
+            var in_stream = buf_reader.reader();
+
+            var buf: [64]u8 = undefined;
+
+            while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+                // try stdout.print("Buf len {d} line len {d}\n", .{buf.len, line.len});
+
+                if (line.len != 15) {
+                    try stdout.print("Something is wrong with buf len in file {s} {d}\n", .{buf, buf.len});
+                }
+
+                var it = std.mem.window(u8, line, 10, 10);
+                const key = it.next() orelse "";
+                const value = it.next() orelse "";
+
+                if (key.len != 10) {
+                    try stdout.print("Something is wrong with key {s} {d}\n", .{key, key.len});
+                }
+                if (value.len != 5) {
+                    try stdout.print("Something is wrong with value {s} {d}\n", .{value, value.len});
+                }
+
+                const keyAlloc = try self.allocator.alloc(u8, 10);
+                const valueAlloc = try self.allocator.alloc(u8, 5);
+
+                @memcpy(keyAlloc, key);
+                @memcpy(valueAlloc, value);
+
+                try stdout.print("Buf len {d} buf {s} key {s} value {s}\n", .{line.len, line, keyAlloc, valueAlloc});
+                // @memcpy(&buf, line);
+                const res = self.put(keyAlloc, valueAlloc) catch |err| {
+                    try stdout.print("Error {any}\n", .{err});
+                    return err;
+                };
+                try stdout.print("Res {any}\n", .{res});
+                if (res > 0) {
+                    return res;
+                }
+            }
+
+            return 0;
         }
     };
 }
@@ -133,20 +184,24 @@ test "Test NaiveKeyValue" {
     var kv = NaiveKeyValue([5]u8).init(allocator);
 
     const res1 = kv.put("test0", "moo") catch {
+        try std.testing.expectEqual(false, true);
         return;
     };
     try std.testing.expectEqual(res1, 0);
 
     const res2 = kv.put("test1", "moo2") catch {
+        try std.testing.expectEqual(false, true);
         return;
     };
     try std.testing.expectEqual(res2, 0);
 
     const res = kv.get("test0");
+
     try std.testing.expectEqual(res.?.len, 5);
+    try std.testing.expectEqual(res, [5]u8{'m','o','o',170,170});
 }
 
-test "Test NaiveKeyValue truncates large value" {
+test "Test value too large" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
@@ -157,8 +212,46 @@ test "Test NaiveKeyValue truncates large value" {
     const res1 = kv.put("test0", "0123456789") catch {
         return;
     };
+    try std.testing.expectEqual(res1, 1);
+}
+
+test "Test load file" {
+
+    const stdout = std.io.getStdOut().writer();
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
+    var kv = NaiveKeyValue([5]u8).init(allocator);
+
+    const res1 = kv.load("./src/test-data/kv-load.dat") catch |err| {
+        try stdout.print("Failed to load file {any}\n", .{err});
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+
     try std.testing.expectEqual(res1, 0);
 
-    const res = kv.get("test0");
+    try std.testing.expectEqual(kv.backingMap.count(), 3);
+    var kit = kv.backingMap.keyIterator();
+    var keyCount: u8 = 0;
+    while (kit.next()) |k| {
+        try stdout.print("Key {s}\n", .{k});
+        keyCount += 1;
+    }
+    try std.testing.expectEqual(keyCount, 3);
+
+    const ress = kv.put("0011223344", "one") catch |err| {
+        try stdout.print("Failed to put {any}\n", .{err});
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+    try std.testing.expectEqual(ress, 0);
+
+    const res = kv.get("0123456789");
     try std.testing.expectEqual(res.?.len, 5);
+    try stdout.print("Value {s}\n", .{res.?});
+    try std.testing.expectEqual(res, [5]u8{'t','e','s','t','1'});
 }
