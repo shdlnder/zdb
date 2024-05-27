@@ -14,7 +14,7 @@ pub const COMMAND_RESULT = enum {
     UNRECOGNIZED_COMMAND,
 };
 
-pub fn parseCommand(command: []u8) COMMAND_RESULT {
+pub fn parseCommand(command: []const u8) COMMAND_RESULT {
     if (std.mem.startsWith(u8, command, CMD_GET)) {
         return COMMAND_RESULT.GET;
     } else if (std.mem.startsWith(u8, command, CMD_PUT)) {

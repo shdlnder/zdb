@@ -1,7 +1,7 @@
 const std = @import("std");
 const commands = @import("./commands.zig");
 
-pub fn prepareGet(command: []u8) commands.PreparedGetCommand {
+pub fn prepareGetRepl(command: []const u8) commands.PreparedGetCommand {
     var iter = std.mem.tokenizeAny(u8, command, " \r\n");
 
     const op = iter.next() orelse "";
@@ -49,4 +49,29 @@ pub fn prepareGetKV(key: []const u8) commands.PreparedGetCommand {
             .key = key,
         },
     };
+}
+
+test "Test prepareGetRepl success" {
+    const res = prepareGetRepl("GET test0");
+    try std.testing.expectEqual(std.mem.eql(u8, res.op.key, "test0"), true);
+}
+
+test "Test prepareGetRepl invalid key" {
+    const res = prepareGetRepl("GET");
+    try std.testing.expectEqual(res.result, commands.PREP_RESULT.INVALID_KEY);
+}
+
+test "Test prepareGetRepl invalid command" {
+    const res = prepareGetRepl("MOOO test0");
+    try std.testing.expectEqual(res.result, commands.PREP_RESULT.INVALID_COMMAND);
+}
+
+test "Test prepareGetKV success" {
+    const res = prepareGetKV("moo");
+    try std.testing.expectEqual(std.mem.eql(u8, res.op.key, "moo"), true);
+}
+
+test "Test prepareGetKV invalid key" {
+    const res = prepareGetKV("");
+    try std.testing.expectEqual(res.result, commands.PREP_RESULT.INVALID_KEY);
 }

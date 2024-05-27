@@ -25,5 +25,5 @@ pub const OpGet = struct {
 
 pub const OpPut = struct {
     key: []const u8,
-    value: [5]u8,
+    value: []const u8,
 };

@@ -14,17 +14,16 @@ fn readInput(input: *[500]u8, stdin: anytype) anyerror!?[]u8 {
 
 pub fn runRepl(allocator: std.mem.Allocator, stdin: anytype, stdout: anytype) anyerror!u2 {
 
-    var dataHash = std.StringHashMap([5]u8).init(allocator);
-    var input: [500]u8 = undefined;
+    var dataHash = std.StringHashMap([]const u8).init(allocator);
 
     while (true) {
         printPrompt(stdout) catch {
             return 1;
         };
 
-        const command: []u8 = stdin.readUntilDelimiterOrEof(&input, '\n') catch {
+        const command: []const u8 = stdin.readUntilDelimiterAlloc(allocator, '\n', 500) catch {
             return 1;
-        } orelse "";
+        };
 
         // require something, ANYTHING!
         if (command.len < 1) {
@@ -37,21 +36,21 @@ pub fn runRepl(allocator: std.mem.Allocator, stdin: anytype, stdout: anytype) an
 
         switch (result) {
         repl.COMMAND_RESULT.GET => {
-            const prepared: commands.PreparedGetCommand = prepareGet.prepareGet(command);
+            const prepared: commands.PreparedGetCommand = prepareGet.prepareGetRepl(command);
 
             if (prepared.result != commands.PREP_RESULT.SUCCESS) {
                 try stdout.print("Prepare Command Failed\n", .{});
                 continue;
             }
 
-            const executed = dataHash.get(prepared.op.key) orelse [5]u8{' ', ' ', ' ', ' ', ' '};
+            const executed = dataHash.get(prepared.op.key) orelse "";
 
             try stdout.print("Execute Command Success\n", .{});
             try stdout.print("Key: <{s}> Value: <{s}>\n", .{prepared.op.key, executed});
             continue;
         },
         repl.COMMAND_RESULT.PUT => {
-            const prepared: commands.PreparedPutCommand = preparePut.preparePut(command);
+            const prepared: commands.PreparedPutCommand = preparePut.preparePutRepl(command);
 
             if (prepared.result != commands.PREP_RESULT.SUCCESS) {
                 try stdout.print("Prepare Command Failed\n", .{});
@@ -119,12 +118,12 @@ pub fn NaiveKeyValue(
                 return null;
             }
 
-            return self.backingMap.get(prepared.op.key) orelse [5]u8{' ', ' ', ' ', ' ', ' '};
+            return self.backingMap.get(prepared.op.key) orelse "";
         }
 
         // Currently the keys are 10 and values are 5
         // reset size later
-        pub fn load(self: *Self, fileName: []const u8) anyerror!u2 {
+        pub fn loadPlaintextLineByLine(self: *Self, fileName: []const u8) anyerror!u2 {
             const stdout = std.io.getStdOut().writer();
             var file = try std.fs.cwd().openFile(fileName, .{});
             defer file.close();
@@ -212,7 +211,7 @@ test "Test NaiveKeyValue" {
 
     const allocator = arena.allocator();
 
-    var kv = NaiveKeyValue([5]u8).init(allocator);
+    var kv = NaiveKeyValue([]const u8).init(allocator);
 
     const res1 = kv.put("test0", "moo") catch {
         try std.testing.expectEqual(false, true);
@@ -228,25 +227,40 @@ test "Test NaiveKeyValue" {
 
     const res = kv.get("test0");
 
-    try std.testing.expectEqual(res.?.len, 5);
-    try std.testing.expectEqual(res, [5]u8{'m','o','o',170,170});
+    try std.testing.expectEqual(res.?.len, 3);
+    try std.testing.expectEqual(res, "moo");
 }
 
-test "Test value too large" {
+test "Test multiple PUT/GET" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     const allocator = arena.allocator();
 
-    var kv = NaiveKeyValue([5]u8).init(allocator);
+    var kv = NaiveKeyValue([]const u8).init(allocator);
 
-    const res1 = kv.put("test0", "0123456789") catch {
+    const res0 = kv.put("test0", "test0") catch {
         return;
     };
-    try std.testing.expectEqual(res1, 1);
+    const res1 = kv.put("test1", "test1") catch {
+        return;
+    };
+    const res2 = kv.put("test2", "test2") catch {
+        return;
+    };
+    try std.testing.expectEqual(res0, 0);
+    try std.testing.expectEqual(res1, 0);
+    try std.testing.expectEqual(res2, 0);
+
+    const get0 = kv.get("test0");
+    const get1 = kv.get("test1");
+    const get2 = kv.get("test2");
+    try std.testing.expectEqual(std.mem.eql(u8, get0.?, "test0"), true);
+    try std.testing.expectEqual(std.mem.eql(u8, get1.?, "test1"), true);
+    try std.testing.expectEqual(std.mem.eql(u8, get2.?, "test2"), true);
 }
 
-test "Test load file" {
+test "Test loadPlaintextLineByLine file" {
 
     const stdout = std.io.getStdOut().writer();
 
@@ -255,10 +269,10 @@ test "Test load file" {
 
     const allocator = arena.allocator();
 
-    var kv = NaiveKeyValue([5]u8).init(allocator);
+    var kv = NaiveKeyValue([]const u8).init(allocator);
 
-    const res1 = kv.load("./src/test-data/kv-load.dat") catch |err| {
-        try stdout.print("Failed to load file {any}\n", .{err});
+    const res1 = kv.loadPlaintextLineByLine("./src/test-data/kv-plaintext-linebyline.dat") catch |err| {
+        try stdout.print("Failed to loadPlaintextLineByLine file {any}\n", .{err});
         try std.testing.expectEqual(false, true);
         return;
     };
@@ -284,16 +298,17 @@ test "Test load file" {
     const res = kv.get("0123456789");
     try std.testing.expectEqual(res.?.len, 5);
     try stdout.print("Value {s}\n", .{res.?});
-    try std.testing.expectEqual(res, [5]u8{'t','e','s','t','1'});
+    const c: []const u8 = res orelse "";
+    try std.testing.expectEqual(std.mem.eql(u8, c, "test1"), true);
 }
 
-test "Test NaiveKeyValue Write File" {
+test "Test NaiveKeyValue Write Unicode File" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     const allocator = arena.allocator();
 
-    var kv = NaiveKeyValue([5]u8).init(allocator);
+    var kv = NaiveKeyValue([]const u8).init(allocator);
 
     const res1 = kv.put("test0", "moo") catch {
         try std.testing.expectEqual(false, true);
