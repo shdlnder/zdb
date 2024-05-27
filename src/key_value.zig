@@ -172,9 +172,57 @@ pub fn NaiveKeyValue(
             return 0;
         }
 
-        // Currently the keys are 10 and values are 5
-        // reset size later
-        pub fn fileDump(self: *Self, fileName: []const u8) anyerror!u2 {
+        // read via delimiter
+        // format is delimiter key delimiter value delimiter
+        pub fn loadUnicodeByDelimiterAlloc(self: *Self, fileName: []const u8, delimiter: u8, alloc: std.mem.Allocator) anyerror!u2 {
+            const stdout = std.io.getStdOut().writer();
+            var file = try std.fs.cwd().openFile(fileName, .{});
+            defer file.close();
+
+            var buf_reader = std.io.bufferedReader(file.reader());
+            var in_stream = buf_reader.reader();
+
+            var key: ?[]const u8 = null;
+            var value: ?[]const u8 = null;
+
+            // The size of this can fail
+            // TODO handle later
+            while (try in_stream.readUntilDelimiterOrEofAlloc(alloc, delimiter, 1024)) |readValue| {
+                try stdout.print("readValue {s} readValue len {d}\n", .{readValue, readValue.len});
+
+                if (readValue.len < 1) {
+                    continue;
+                }
+
+                if (key == null) {
+                    key = readValue;
+                } else {
+                    value = readValue;
+                }
+
+                if (value != null) {
+                    const res = self.put(key.?, value.?) catch |err| {
+                        try stdout.print("Error {any}\n", .{err});
+                        return err;
+                    };
+
+                    try stdout.print("Res {any}\n", .{res});
+                    if (res > 0) {
+                        return res;
+                    }
+
+                    key = null;
+                    value = null;
+                }
+            }
+
+            return 0;
+        }
+
+        // Write delimiter to first byte
+        // Read delimiter
+        // Stream rest of bytes by delimiter?
+        pub fn fileDumpUtf8Delimited(self: *Self, fileName: []const u8, delimiter: u8) anyerror!u2 {
 
             const stdout = std.io.getStdOut().writer();
             try stdout.print("Starting write\n", .{});
@@ -182,22 +230,17 @@ pub fn NaiveKeyValue(
             const file = try std.fs.cwd().createFile(fileName, .{  });
             defer file.close();
 
+            // try write delimiter
+            const delLine = [1]u8{delimiter};
+            try file.writeAll(&delLine);
             var it = self.backingMap.iterator();
             while (it.next()) |entry| {
                 try stdout.print("Next!\n", .{});
-                // I don't like saving like this
-                var writeMe: [16]u8 = undefined;
 
-                var mutableEndSlice: []u8 = writeMe[15..16];
-                mutableEndSlice[0] = '\n';
-                var mutableKeySlice: []u8 = writeMe[0..10];
-                @memcpy(std.mem.asBytes(&mutableKeySlice)[0..10], std.mem.asBytes(&entry.key_ptr.*)[0..10]);
-                var mutableValSlice: []u8 = writeMe[10..15];
-                @memcpy(std.mem.asBytes(&mutableValSlice)[0..5], std.mem.asBytes(&entry.value_ptr.*)[0..5]);
-
-                try stdout.print("Write this {s}\n", .{writeMe});
-
-                try file.writeAll(&writeMe);
+                _ = try file.writeAll(entry.key_ptr.*);
+                _ = try file.writeAll(&[1]u8 {delimiter});
+                _ = try file.writeAll(entry.value_ptr.*);
+                _ = try file.writeAll(&[1]u8 {delimiter});
             }
 
             return 0;
@@ -324,12 +367,43 @@ test "Test NaiveKeyValue Write Unicode File" {
 
     const res = kv.get("test0");
 
-    try std.testing.expectEqual(res.?.len, 5);
-    try std.testing.expectEqual(res, [5]u8{'m','o','o',170,170});
+    try std.testing.expectEqual(res.?.len, 3);
+    try std.testing.expectEqual(res, "moo");
 
-    const resf = kv.fileDump("./src/out-data/kv-dump.dat") catch {
+    const resf = kv.fileDumpUtf8Delimited("./src/out-data/kv-unicode-zero-delimiter.dat", 0) catch {
         try std.testing.expectEqual(false, true);
         return;
     };
     try std.testing.expectEqual(resf, 0);
+}
+
+test "Test loadUnicodeByDelimiterAlloc file" {
+
+    const stdout = std.io.getStdOut().writer();
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
+    var kv = NaiveKeyValue([]const u8).init(allocator);
+
+    const res1 = kv.loadUnicodeByDelimiterAlloc("./src/test-data/kv-unicode-zero-delimiter.dat", 0, allocator) catch |err| {
+        try stdout.print("Failed to loadPlaintextLineByLine file {any}\n", .{err});
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+
+    try std.testing.expectEqual(res1, 0);
+
+    try std.testing.expectEqual(kv.backingMap.count(), 4);
+    var kit = kv.backingMap.keyIterator();
+    var keyCount: u8 = 0;
+    while (kit.next()) |k| {
+        try stdout.print("Key {s}\n", .{k});
+        keyCount += 1;
+    }
+    try std.testing.expectEqual(keyCount, 4);
+
+    // TODO add more here, verify key values or something
 }
