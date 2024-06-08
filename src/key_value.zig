@@ -30,6 +30,10 @@ const KeyValStruct = extern struct {
     value: StrStruct10,
 };
 
+const KeyValBasic = extern struct {
+    key: [10]u8,
+    value: [10]u8,
+};
 
 pub fn validateStrStruct10(str: []const u8) bool {
     return str.len <= 10;
@@ -90,6 +94,23 @@ pub fn makeStrArrFromStrStruct10(str: StrStruct10, alloc: std.mem.Allocator) []c
         if (s != undefined) {
             size += 1;
         }
+    }
+    return arr[0..size];
+}
+
+// trim the fatty undefined/zeroes off the incoming array (ideally u8, figure out better generics or comptimes plz me)
+pub fn slimification(comptime T: type, comptime Q: type, inArr: T, alloc: std.mem.Allocator) Q {
+    const arr = alloc.alloc(u8, inArr.len) catch {
+        unreachable;
+    };
+    @memcpy(arr[0..inArr.len], inArr[0..inArr.len]);
+
+    var size: u4 = 0;
+    for (arr) |s| {
+        if (s == undefined) {
+            break;
+        }
+        size += 1;
     }
     return arr[0..size];
 }
@@ -325,9 +346,7 @@ pub fn NaiveKeyValue(
             return 0;
         }
 
-        // Write delimiter to first byte
-        // Read delimiter
-        // Stream rest of bytes by delimiter?
+        // Write struct to file
         pub fn fileDumpStruct(self: *Self, fileName: []const u8) anyerror!u2 {
             std.debug.print("Starting write\n", .{});
 
@@ -341,6 +360,37 @@ pub fn NaiveKeyValue(
                 const item = KeyValStruct{
                     .key = makeStrStruct10(entry.key_ptr.*),
                     .value = makeStrStruct10(entry.value_ptr.*),
+                };
+
+                try file.writer().writeStruct(item);
+            }
+
+            return 0;
+        }
+
+        // Write another struct to file
+        pub fn fileDumpKeyValBasic(self: *Self, fileName: []const u8) anyerror!u2 {
+            std.debug.print("Starting write\n", .{});
+
+            const file = try std.fs.cwd().createFile(fileName, .{  });
+            defer file.close();
+
+            var keyBuff: [10]u8 = undefined;
+            var valBuff: [10]u8 = undefined;
+
+            var it = self.backingMap.iterator();
+            while (it.next()) |entry| {
+                std.debug.print("Next!\n", .{});
+
+                keyBuff = std.mem.zeroes([10]u8);
+                valBuff = std.mem.zeroes([10]u8);
+
+                @memcpy(keyBuff[0..entry.key_ptr.*.len], entry.key_ptr.*);
+                @memcpy(valBuff[0..entry.value_ptr.*.len], entry.value_ptr.*);
+
+                const item = KeyValBasic{
+                    .key = keyBuff,
+                    .value = valBuff,
                 };
 
                 try file.writer().writeStruct(item);
@@ -372,6 +422,44 @@ pub fn NaiveKeyValue(
 
                 const key = makeStrArrFromStrStruct10(readValue.key, alloc);
                 const value = makeStrArrFromStrStruct10(readValue.value, alloc);
+                std.debug.print("key {s} value {s}\n", .{key, value});
+
+                const res = self.put(key, value) catch |err| {
+                    std.debug.print("Error {any}\n", .{err});
+                    return 1;
+                };
+                std.debug.print("Res {any}\n", .{res});
+                if (res > 0) {
+                    return res;
+                }
+            }
+
+            return 0;
+        }
+
+        // read via struct
+        // format is struct
+        pub fn loadByKeyValBasic(self: *Self, fileName: []const u8, alloc: std.mem.Allocator) anyerror!u2 {
+            var file = try std.fs.cwd().openFile(fileName, .{});
+            defer file.close();
+
+            const reader = file.reader();
+
+            // The size of this can fail
+            // TODO handle later
+            var find = true;
+            while (find) {
+                const readValue = reader.readStruct(KeyValBasic) catch |err| {
+                    // TODO this always hits with the EndOfStream
+                    // Solve later
+                    find = false;
+                    std.debug.print("find error {any}\n", .{err});
+                    continue;
+                };
+                std.debug.print("readValue {any}\n", .{readValue});
+
+                const key = slimification([10]u8, []const u8, readValue.key, alloc);
+                const value = slimification([10]u8, []const u8, readValue.value, alloc);
                 std.debug.print("key {s} value {s}\n", .{key, value});
 
                 const res = self.put(key, value) catch |err| {
@@ -588,6 +676,67 @@ test "Test loadByStruct file" {
 
     const res1 = kv.loadByStruct("./src/test-data/kv-unicode-struct.dat", allocator) catch |err| {
         std.debug.print("Failed to loadByStruct file {any}\n", .{err});
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+
+    try std.testing.expectEqual(res1, 0);
+
+    try std.testing.expectEqual(kv.backingMap.count(), 2);
+    var kit = kv.backingMap.keyIterator();
+    var keyCount: u8 = 0;
+    while (kit.next()) |k| {
+        std.debug.print("Key {s}\n", .{k.*});
+        keyCount += 1;
+    }
+    try std.testing.expectEqual(keyCount, 2);
+
+    // TODO add more here, verify key values or something
+}
+
+test "Test fileDumpKeyValBasic Write Struct File" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
+    var kv = NaiveKeyValue([]const u8).init(allocator);
+
+    const res1 = kv.put("test0", "moo") catch {
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+    try std.testing.expectEqual(res1, 0);
+
+    const res2 = kv.put("test1", "moo2") catch {
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+    try std.testing.expectEqual(res2, 0);
+
+    const res = kv.get("test0");
+
+    try std.testing.expectEqual(res.?.len, 3);
+    try std.testing.expectEqual(res, "moo");
+
+    const resf = kv.fileDumpKeyValBasic("./src/out-data/kv-unicode-basic-zeroes-struct.dat") catch {
+        try std.testing.expectEqual(false, true);
+        return;
+    };
+    try std.testing.expectEqual(resf, 0);
+}
+
+test "Test loadByKeyValBasic file" {
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
+    var kv = NaiveKeyValue([]const u8).init(allocator);
+
+    const res1 = kv.loadByKeyValBasic("./src/test-data/kv-unicode-basic-zeroes-struct.dat", allocator) catch |err| {
+        std.debug.print("Failed to loadByKeyValBasic file {any}\n", .{err});
         try std.testing.expectEqual(false, true);
         return;
     };
